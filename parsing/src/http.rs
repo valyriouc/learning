@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum HttpMethod {
     GET,
     POST,
@@ -77,6 +78,7 @@ pub struct HttpResponse {
     pub body: Option<String>,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum HttpRequestError {
     InvalidRequest(String),
     InvalidHeader(String),
@@ -99,6 +101,20 @@ impl HttpMethod {
             _ => Err(HttpRequestError::InvalidMethod(method.to_string())),
         }
     }
+
+    fn to_str(&self) -> &str {
+        match self {
+            HttpMethod::GET => "GET",
+            HttpMethod::POST => "POST",
+            HttpMethod::PUT => "PUT",
+            HttpMethod::DELETE => "DELETE",
+            HttpMethod::HEAD => "HEAD",
+            HttpMethod::OPTIONS => "OPTIONS",
+            HttpMethod::PATCH => "PATCH",
+            HttpMethod::TRACE => "TRACE",
+            HttpMethod::CONNECT => "CONNECT",
+        }
+    }
 }
 
 impl HttpContentType {
@@ -114,15 +130,22 @@ impl HttpContentType {
             other => HttpContentType::Other(other.to_string()),
         }
     }
+
+    fn to_str(&self) -> &str {
+        match self {
+            HttpContentType::TextHtml => "text/html",
+            HttpContentType::ApplicationJson => "application/json",
+            HttpContentType::ApplicationXml => "application/xml",
+            HttpContentType::TextPlain => "text/plain",
+            HttpContentType::MultipartFormData => "multipart/form-data",
+            HttpContentType::ApplicationXWwwFormUrlencoded => "application/x-www-form-urlencoded",
+            HttpContentType::EventStream => "text/event-stream",
+            HttpContentType::Other(s) => s,
+        }
+    }
 }
 
 type HttpHandler = fn(HttpRequest) -> Result<HttpResponse, HttpRequestError>;
-
-
-pub fn validate_http_request(request: &HttpRequest) -> Result<(), HttpRequestError> {
-    // TODO: Implement read validation logic 
-    Ok(())
-}
 
 pub fn write_http_request(request: HttpRequest) -> Result<(), HttpRequestError> {
     return Ok(());
@@ -142,8 +165,15 @@ pub fn read_http_response(input: &str) -> Result<HttpResponse, HttpRequestError>
     })
 }
 
-pub fn read_http(input: &str) -> Result<HttpRequest, HttpRequestError> {
-    // TODO: Implement a real HTTP request parser
+enum ParserState {
+    RequestLine,
+    Headers,
+    Body,
+    Done
+}
+
+pub fn read_http_request(input: &str) -> Result<HttpRequest, HttpRequestError> {
+
     Ok(
         HttpRequest {
         method: HttpMethod::GET,
@@ -152,4 +182,21 @@ pub fn read_http(input: &str) -> Result<HttpRequest, HttpRequestError> {
         headers: HashMap::new(), 
         body: None 
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_http_method() {
+        let get_method = HttpMethod::from_str("GET").unwrap();
+        assert_eq!(get_method.to_str(), "GET");
+
+        let post_method = HttpMethod::from_str("POST").unwrap();
+        assert_eq!(post_method.to_str(), "POST");
+
+        let invalid_method = HttpMethod::from_str("INVALID");
+        assert!(invalid_method.is_err());
+    }
+
 }

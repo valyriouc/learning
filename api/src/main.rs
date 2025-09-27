@@ -1,8 +1,68 @@
 use parsing::{parse_json, JsonType, FromJson};
+use std::{
+    io::{BufReader, prelude::*},
+    net::{TcpListener, TcpStream},
+};
+
 
 fn main() {
+    
+}
 
-    let json_str = r#"
+fn http_server() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
+    for stream in listener.incoming() {
+        let mut stream = stream.unwrap();
+
+        let mut buf = String::new();
+        let mut buf_reader = BufReader::new(&stream);
+
+        println!("Request: {buf:#?}");
+
+        let json = r#"
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Sample JSON</title>
+        </head>
+        <body>
+            <h1>Sample JSON Data</h1>
+            <pre>
+{
+    "name": "John Doe",
+    "age": 30,
+    "is_student": false,        
+    "courses": ["Math", "Science", "History"],
+    "address": {
+        "street": "123 Main St",
+        "city": "Anytown",
+        "zip": "12345"
+    }
+}
+            </pre>
+        </body>
+        </html>
+        "#;
+
+        let response 
+        
+            = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
+            json.bytes().len(),
+            json
+        );
+
+        stream.write(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
+        break;
+    }
+}
+
+fn json_testing() {
+        let json_str = r#"
     {
         "name": "John Doe",
         "age": 30,
