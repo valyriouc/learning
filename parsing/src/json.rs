@@ -21,6 +21,10 @@ pub enum JsonType {
     Boolean(bool)
 }
 
+pub trait FromJson {
+    fn from_json(json: &JsonType) -> Self;
+}
+
 pub fn parse_json(mut input: &str) -> Result<JsonType, ParserError>  {
     if input.trim().is_empty() {
         return Err(ParserError::EmptyInput);
