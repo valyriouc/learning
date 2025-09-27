@@ -17,6 +17,7 @@ pub enum JsonType {
     Array(Vec<JsonType>),
     String(String),
     Number(i64),
+    Decimal(f64),
     Boolean(bool)
 }
 
@@ -87,7 +88,7 @@ fn parse_string(input: &str) -> Result<(String, &str), ParserError> {
     }
 }
 
-fn parse_number(input: &str) -> Result<(i64, &str), ParserError> {
+fn parse_number(input: &str) -> Result<(JsonType, &str), ParserError> {
     if input.is_empty() {
         return Err(ParserError::EmptyInput);
     }
@@ -99,7 +100,7 @@ fn parse_number(input: &str) -> Result<(i64, &str), ParserError> {
         match buffer.chars().nth(0) {
             Some(c) => {
                 match c {
-                    '0'..='9' | '-' => {
+                    '0'..='9' | '-' | '.'=> {
                         builder.push(c);
                         buffer = &buffer[1..];
                     },
@@ -108,11 +109,18 @@ fn parse_number(input: &str) -> Result<(i64, &str), ParserError> {
                             return Err(ParserError::InvalidSyntax(format!("Invalid number: {}", input)));
                         } 
                         
-                        match builder.parse::<i64>() {
-                            Ok(num) => return Ok((num, buffer)),
-                            Err(_) => return Err(ParserError::InvalidSyntax(format!("Invalid number: {}", builder)))
+                        if builder.contains('.') {
+                            match builder.parse::<f64>() {
+                                Ok(num) => return Ok((JsonType::Decimal(num), buffer)),
+                                Err(_) => return Err(ParserError::InvalidSyntax(format!("Invalid number: {}", builder)))
+                            }
                         }
-                        
+                        else {
+                            match builder.parse::<i64>() {
+                                Ok(num) => return Ok((JsonType::Number(num), buffer)),
+                                Err(_) => return Err(ParserError::InvalidSyntax(format!("Invalid number: {}", builder)))
+                            }
+                        }
                     }
                 }
             }
@@ -172,7 +180,7 @@ fn parse_array(mut input: &str) -> Result<(Vec<JsonType>, &str), ParserError> {
                 match parse_number(input) {
                     Ok(n) => {
                         input = n.1.trim_start();
-                        result.push(JsonType::Number(n.0))
+                        result.push(n.0)
                     },
                     Err(e) => return Err(e)
                 }
@@ -258,7 +266,7 @@ fn parse_object(mut input: &str) -> Result<(HashMap<String, JsonType>, &str), Pa
                     match parse_number(input) {
                         Ok(n) => {
                             input = n.1;
-                            JsonType::Number(n.0)
+                            n.0
                         },
                         Err(e) => return Err(e)
                     }
@@ -478,8 +486,8 @@ mod tests {
     "address": "511 Nova Court, Tetherow, Indiana, 5807",
     "about": "Non cillum adipisicing consequat sunt tempor pariatur occaecat sint laborum sit. Exercitation dolore duis occaecat proident elit enim. Nostrud aliquip incididunt reprehenderit ipsum et excepteur exercitation.\r\n",
     "registered": "2020-05-02T02:37:23 -02:00",
-    "latitude": 56,
-    "longitude": -140,
+    "latitude": 56.2324,
+    "longitude": -140.453,
     "tags": [
       "reprehenderit",
       "laboris",
