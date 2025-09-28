@@ -1,12 +1,71 @@
 use parsing::{parse_json, JsonType, FromJson};
 use std::{
-    io::{BufReader, prelude::*},
-    net::{TcpListener, TcpStream},
+    collections::HashMap, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}
 };
-
+use parsing::{HttpRequest, HttpResponse, KnownHeader, HttpContentType, HttpPlatform, HttpStatusCode, read_http_request, write_http_response};
 
 fn main() {
-    
+
+    let platform = HttpPlatform::new(|req| {
+        println!("Handling request for path: {}", req.path.full_path);
+        let mut headers = HashMap::<String, KnownHeader>::new();
+        
+        match req.path.path.as_str() {
+            "/" => {
+                headers.insert("Content-Type".to_string(), KnownHeader::ContentType(HttpContentType::TextHtml));
+                headers.insert("Content-Length".to_string(), KnownHeader::ContentLength("<h1>Welcome to the Rust HTTP Server!</h1>".bytes().len()));
+                return HttpResponse {
+                    version: req.version,
+                    status_code: HttpStatusCode::OK,
+                    headers: headers,
+                    body: Some("<h1>Welcome to the Rust HTTP Server!</h1>".to_string()),
+                }
+            },
+            "/json" => {
+                let json_str = r#"
+                {
+                    "name": "John Doe",
+                    "age": 30,
+                    "is_student": false,        
+                    "courses": ["Math", "Science", "History"],
+                    "address": {
+                        "street": "123 Main St",
+                        "city": "Anytown",
+                        "zip": "12345"
+                    }
+                }
+                "#;
+
+                headers.insert("Content-Type".to_string(), KnownHeader::ContentType(HttpContentType::ApplicationJson));
+                headers.insert("Content-Length".to_string(), KnownHeader::ContentLength(json_str.bytes().len()));
+                
+                return HttpResponse {
+                    version: req.version,
+                    status_code: HttpStatusCode::OK,
+                    headers: headers,
+                    body: Some(json_str.to_string()),
+                }
+            },
+            _ => {
+
+                headers.insert("Content-Type".to_string(), KnownHeader::ContentType(HttpContentType::TextHtml));
+                headers.insert("Content-Length".to_string(), KnownHeader::ContentLength("<h1>404 Not Found</h1>".bytes().len()));
+                return HttpResponse {
+                    version: req.version,
+                    status_code: HttpStatusCode::NotFound,
+                    headers: headers,
+                    body: Some("<h1>404 Not Found</h1>".to_string()),
+                }
+            }
+        }
+    });
+
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+
+        platform.handle_request(stream);
+    }  
 }
 
 fn http_server() {
