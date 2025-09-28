@@ -4,11 +4,47 @@ use std::{
     collections::HashMap, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}
 };
 
-use parsing::{HttpRequest, HttpResponse, KnownHeader, HttpContentType, HttpPlatform, HttpStatusCode, read_http_request, write_http_response};
+use parsing::{HttpRequest, HttpMethod, HttpPath, HttpVersion, HttpResponse, KnownHeader, HttpContentType, HttpPlatform, HttpStatusCode, read_http_request, write_http_request, write_http_response};
 
 fn main() {
 
-    let platform = HttpPlatform::new(|req| {
+    let mut stream = TcpStream::connect("127.0.0.1:8000").unwrap();
+
+    let mut headers = HashMap::<String, KnownHeader>::new();
+    headers.insert("Host".to_string(), KnownHeader::Host("localhost:8000".to_string()));
+    headers.insert("Accept".to_string(), KnownHeader::Accept("*/*".to_string()));
+    headers.insert("Connection".to_string(), KnownHeader::Connection("close".to_string())); 
+
+    let req = HttpRequest {
+        method: HttpMethod::GET,
+        path: HttpPath::from_str("/index.html"),
+        version: HttpVersion::HTTP11,
+        headers: headers,
+        body: None,
+    };
+
+    match write_http_request(req) {
+        Ok(str_req) => {
+            println!("Request:\n{}", str_req);
+            stream.write(str_req.as_bytes()).unwrap();
+            stream.flush().unwrap();
+
+            let mut buffer: [u8; 8024] = [0; 8024];
+            loop {
+                let bytes_read = stream.read(&mut buffer).unwrap();
+                if bytes_read == 0 {
+                    break;
+                }
+                let response_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+                println!("Response chunk:\n{}", response_str);
+            }
+        }
+        Err(e) => println!("Error serializing HTTP request: {:?}", e),
+    }
+}
+
+fn run_custom_http_server() {
+let platform = HttpPlatform::new(|req| {
         println!("Handling request for path: {}", req.path.full_path);
         let mut headers = HashMap::<String, KnownHeader>::new();
         

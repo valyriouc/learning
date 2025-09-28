@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{BufRead, Read, Write},
+    io::{Read, Write},
 };
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -29,6 +29,15 @@ impl HttpVersion {
             HttpVersion::HTTP10 => "HTTP/1.0",
             HttpVersion::HTTP11 => "HTTP/1.1",
             HttpVersion::HTTP20 => "HTTP/2.0",
+        }
+    }
+
+    fn from_str(version: &str) -> Result<HttpVersion, HttpRequestError> {
+        match version {
+            "HTTP/1.0" => Ok(HttpVersion::HTTP10),
+            "HTTP/1.1" => Ok(HttpVersion::HTTP11),
+            "HTTP/2.0" => Ok(HttpVersion::HTTP20),
+            _ => Err(HttpRequestError::InvalidVersion(version.to_string())),
         }
     }
 }
@@ -84,6 +93,31 @@ impl HttpStatusCode {
             HttpStatusCode::NotImplemented => "501",
             HttpStatusCode::BadGateway => "502",
             HttpStatusCode::ServiceUnavailable => "503",
+        }
+    }
+
+    fn from_str(code: &str) -> Result<HttpStatusCode, HttpRequestError> {
+        match code {
+            "200" => Ok(HttpStatusCode::OK),
+            "201" => Ok(HttpStatusCode::Created),
+            "202" => Ok(HttpStatusCode::Accepted),
+            "204" => Ok(HttpStatusCode::NoContent),
+            "301" => Ok(HttpStatusCode::MovedPermanently),
+            "302" => Ok(HttpStatusCode::Found),
+            "304" => Ok(HttpStatusCode::NotModified),
+            "400" => Ok(HttpStatusCode::BadRequest),
+            "401" => Ok(HttpStatusCode::Unauthorized),
+            "403" => Ok(HttpStatusCode::Forbidden),
+            "404" => Ok(HttpStatusCode::NotFound),
+            "405" => Ok(HttpStatusCode::MethodNotAllowed),
+            "500" => Ok(HttpStatusCode::InternalServerError),
+            "501" => Ok(HttpStatusCode::NotImplemented),
+            "502" => Ok(HttpStatusCode::BadGateway),
+            "503" => Ok(HttpStatusCode::ServiceUnavailable),
+            _ => Err(HttpRequestError::InvalidRequest(format!(
+                "Unknown status code: {}",
+                code
+            ))),
         }
     }
 }
@@ -158,7 +192,7 @@ pub struct HttpPath {
 }
 
 impl HttpPath {
-    fn from_str(path: &str) -> HttpPath {
+    pub fn from_str(path: &str) -> HttpPath {
         let mut full_path = path.to_string();
         let mut path_only = path.to_string();
         let mut query: Option<HashMap<String, String>> = None;
@@ -234,17 +268,17 @@ impl HttpMethod {
         }
     }
 
-    fn to_str(&self) -> &str {
+    fn to_str(self) -> String {
         match self {
-            HttpMethod::GET => "GET",
-            HttpMethod::POST => "POST",
-            HttpMethod::PUT => "PUT",
-            HttpMethod::DELETE => "DELETE",
-            HttpMethod::HEAD => "HEAD",
-            HttpMethod::OPTIONS => "OPTIONS",
-            HttpMethod::PATCH => "PATCH",
-            HttpMethod::TRACE => "TRACE",
-            HttpMethod::CONNECT => "CONNECT",
+            HttpMethod::GET => String::from("GET"),
+            HttpMethod::POST => String::from("POST"),
+            HttpMethod::PUT => String::from("PUT"),
+            HttpMethod::DELETE => String::from("DELETE"),
+            HttpMethod::HEAD => String::from("HEAD"),
+            HttpMethod::OPTIONS => String::from("OPTIONS"),
+            HttpMethod::PATCH => String::from("PATCH"),
+            HttpMethod::TRACE => String::from("TRACE"),
+            HttpMethod::CONNECT => String::from("CONNECT"),
         }
     }
 }
@@ -279,8 +313,37 @@ impl HttpContentType {
 
 type HttpHandler = fn(HttpRequest) -> HttpResponse;
 
-pub fn write_http_request(request: HttpRequest) -> Result<(), HttpRequestError> {
-    return Ok(());
+pub fn write_http_request(request: HttpRequest) -> Result<String, HttpRequestError> {
+    let mut output = format!(
+        "{} {} {}\r\n",
+        request.method.to_str(),
+        request.path.full_path,
+        request.version.to_str()
+    );
+
+    for (header_name, header_value) in request.headers.iter() {
+        let header_line = match header_value {
+            KnownHeader::ContentType(ct) => format!("{}: {}\r\n", header_name, ct.to_str()),
+            KnownHeader::ContentLength(len) => format!("{}: {}\r\n", header_name, len),
+            KnownHeader::UserAgent(ua) => format!("{}: {}\r\n", header_name, ua),
+            KnownHeader::Accept(acc) => format!("{}: {}\r\n", header_name, acc),
+            KnownHeader::Host(host) => format!("{}: {}\r\n", header_name, host),
+            KnownHeader::Authorization(auth) => format!("{}: {}\r\n", header_name, auth),
+            KnownHeader::CacheControl(cc) => format!("{}: {}\r\n", header_name, cc),
+            KnownHeader::Connection(conn) => format!("{}: {}\r\n", header_name, conn),
+            KnownHeader::Cookie(cookie) => format!("{}: {}\r\n", header_name, cookie),
+            KnownHeader::Referer(referer) => format!("{}: {}\r\n", header_name, referer),
+            KnownHeader::Other(value) => format!("{}: {}\r\n", header_name, value),
+        };
+        output.push_str(&header_line);
+    }
+
+    output.push_str("\r\n");
+    if let Some(body) = request.body {
+        output.push_str(body.as_str());
+    }
+
+    return Ok(output);
 }
 
 pub fn write_http_response(response: HttpResponse) -> Result<String, HttpRequestError> {
@@ -367,12 +430,67 @@ impl HttpPlatform {
     }
 }
 
-pub fn read_http_response(input: &str) -> Result<HttpResponse, HttpRequestError> {
+pub fn read_http_response(mut input: &str) -> Result<HttpResponse, HttpRequestError> {
+    let mut state = ParserState::RequestLine;
+    let mut version = HttpVersion::HTTP11;
+    let mut status_code = HttpStatusCode::OK;
+    let mut headers: HashMap<String, KnownHeader> = HashMap::new();
+    let mut body: Option<String> = None;
+    
+    input = input.trim_start();
+    for line in input.lines() {
+        match state {
+            ParserState::RequestLine => {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+
+                if parts.len() < 2 {
+                    return Err(HttpRequestError::InvalidRequest(
+                        "Malformed status line".to_string(),
+                    ));
+                }
+
+                version = HttpVersion::from_str(parts[0])?;
+                status_code = HttpStatusCode::from_str(parts[1])?;
+
+                state = ParserState::Headers;
+            }
+            ParserState::Headers => {
+                if line.is_empty() {
+                    state = ParserState::Body;
+                    continue;
+                }
+
+                let parts: Vec<&str> = line.splitn(2, ':').collect();
+                if parts.len() != 2 {
+                    return Err(HttpRequestError::InvalidHeader(
+                        "Malformed header line".to_string(),
+                    ));
+                }
+
+                let header_name = parts[0].trim();
+                let header_value = parts[1].trim();
+
+                headers.insert(
+                    header_name.to_string(),
+                    KnownHeader::from_str(header_name, header_value),
+                );
+            }
+            ParserState::Body => match body {
+                Some(ref mut b) => {
+                    b.push_str(format!("\r\n{}", line.trim()).as_str());
+                }
+                None => {
+                    body = Some(line.trim().to_string());
+                }
+            },
+        }
+    }
+
     Ok(HttpResponse {
-        version: HttpVersion::HTTP11,
-        status_code: HttpStatusCode::OK,
-        headers: HashMap::new(),
-        body: None,
+        version,
+        status_code,
+        headers,
+        body,
     })
 }
 
