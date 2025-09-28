@@ -1,7 +1,9 @@
 use parsing::{parse_json, JsonType, FromJson};
+
 use std::{
     collections::HashMap, io::{prelude::*, BufReader}, net::{TcpListener, TcpStream}
 };
+
 use parsing::{HttpRequest, HttpResponse, KnownHeader, HttpContentType, HttpPlatform, HttpStatusCode, read_http_request, write_http_response};
 
 fn main() {
@@ -64,8 +66,11 @@ fn main() {
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        platform.handle_request(stream);
-    }  
+        let cln = platform.clone();
+        std::thread::spawn(move || {
+            cln.handle_request(stream);
+        });
+    }
 }
 
 fn http_server() {

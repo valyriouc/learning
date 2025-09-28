@@ -317,6 +317,8 @@ pub fn write_http_response(response: HttpResponse) -> Result<String, HttpRequest
     return Ok(output);
 }
 
+
+#[derive(Clone)]
 pub struct HttpPlatform {
     pub app: HttpHandler,
 }
