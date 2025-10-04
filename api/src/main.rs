@@ -8,16 +8,16 @@ use parsing::{HttpRequest, HttpMethod, HttpPath, HttpVersion, HttpResponse, Know
 
 fn main() {
 
-    let mut stream = TcpStream::connect("127.0.0.1:8000").unwrap();
+    let mut stream = TcpStream::connect("dev.to:443").unwrap();
 
     let mut headers = HashMap::<String, KnownHeader>::new();
-    headers.insert("Host".to_string(), KnownHeader::Host("localhost:8000".to_string()));
+    headers.insert("Host".to_string(), KnownHeader::Host("dev.to:443".to_string()));
     headers.insert("Accept".to_string(), KnownHeader::Accept("*/*".to_string()));
     headers.insert("Connection".to_string(), KnownHeader::Connection("close".to_string())); 
 
     let req = HttpRequest {
         method: HttpMethod::GET,
-        path: HttpPath::from_str("/index.html"),
+        path: HttpPath::from_str("/"),
         version: HttpVersion::HTTP11,
         headers: headers,
         body: None,
